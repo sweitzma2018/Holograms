@@ -23,6 +23,7 @@
 
 #include <opencv2/core.hpp>
 #include "opencv2/imgproc.hpp"
+#include "opencv2/photo.hpp"
 #include <opencv2/highgui/highgui.hpp>
 using namespace cv;
 
@@ -33,7 +34,7 @@ using namespace cv;
 //std::string filename = "testdata";
 
 bool doPreloaded = false;
-bool doRefine = true;
+bool doRefine = false;
 bool doWriteImages = false;
 bool doGenerateDepthMaximum = false;
 bool doMergebounds = true;
@@ -44,9 +45,9 @@ double minAll = std::numeric_limits<double>::max();
 double maxAll = std::numeric_limits<double>::min();
 
 //remote
-bool online = true;
-std::string datafolder = "C:/holograms";
-std::string filename = "flowcam_akashiwo_july24-0g-4us_24-Jul-2015_15-03-43-719.bmp";
+bool online = false;
+std::string datafolder = "D:/data_out/HologramData";
+std::string filename = "EN_581_cast_7__15-Jun-2016_01-07-15-590.bmp";
 std::string ip = "10.12.160.99";
 //std::string ip = "127.0.0.1";
 
@@ -54,8 +55,8 @@ std::string port = "1975";
 Socket *sock = NULL;
 
 //output
-std::string outputfolder = "data_out";
-
+//std::string outputfolder = "data_out";
+std::string outputfolder = "D://HologramData";
 //general settings
 bool show = true;
 int step_size = 100;
@@ -65,11 +66,11 @@ int width = 2048;
 int height = 2048;
 
 //max image
-int windowsize = 5;
+int windowsize = 15;
 
 //contours
-float max_threshold = 0.45;
-double contour_minArea = 15.0;
+float max_threshold = 0.6;
+double contour_minArea = 10.0;
 
 float merge_threshold_depth = 400;
 float merge_threshold_dist = 50;
@@ -82,6 +83,149 @@ int getIdxDepth(std::vector<int> &depths, int depth)
 		return -1;
 	
 	return pos;
+}
+
+void writeImages(int start, int stop, int step_width)
+{
+
+	std::string outdir = outputfolder + "//" + filename;
+	CreateDirectory(outdir.c_str(), NULL);
+
+	sock = new Socket(ip, port);
+
+	//set Image
+	std::string hologram = datafolder + "/" + filename;
+	std::cout << "Loading " << hologram << std::endl;
+	sock->setImage(hologram);
+
+	if (usePhase){
+		sock->setOutputMode(2);
+	}
+	std::string name;
+	std::vector<double> min_vals, max_vals;
+	for (int d = start; d <= stop; d += step_width){
+		std::cerr << "Load phase " << d << std::endl;
+		float* data = new float[width * height];
+		sock->receiveImageData(d, data);
+
+		name = outdir + "//Phase_" + std::to_string(d) + ".ext";
+		FILE* file = fopen(name.c_str(), "wb");
+		fwrite(data, sizeof(float), width * height, file);
+		fclose(file);
+
+		cv::Mat image(cv::Size(width, height), CV_32FC1, data);
+
+		double Min, Max;
+		cv::minMaxLoc(image, &Min, &Max);
+		min_vals.push_back(Min);
+		max_vals.push_back(Max);
+
+		cv::Mat image_disp;
+		cv::Mat B;
+		normalize(image, image_disp, 0, 255, CV_MINMAX);
+		image_disp.convertTo(B, CV_8U);
+
+		imwrite(outdir + "//Phase_" + std::to_string(d) + ".png", B);
+
+		image.release();
+		delete[] data;
+	}
+
+	name = outdir + "//Phase_MinMax.csv";
+	std::ofstream ofs(name.c_str(), std::ofstream::out);
+	for (int i = 0; i < min_vals.size(); i++)
+	{
+		ofs << min_vals[i] << " , " << max_vals[i] << std::endl;
+
+	}
+	ofs.close();
+
+	if (usePhase){
+		sock->setOutputMode(1);
+	}
+
+	min_vals.clear();
+	max_vals.clear();
+
+	for (int d = start; d <= stop; d += step_width){
+		std::cerr << "Load amplitude " << d << std::endl;
+		float* data = new float[width * height];
+		sock->receiveImageData(d, data);
+
+		name = outdir + "//Amplitude_" + std::to_string(d) + ".ext";
+		FILE* file = fopen(name.c_str(), "wb");
+		fwrite(data, sizeof(float), width * height, file);
+		fclose(file);
+
+		cv::Mat image(cv::Size(width, height), CV_32FC1, data);
+
+		double Min, Max;
+		cv::minMaxLoc(image, &Min, &Max);
+		min_vals.push_back(Min);
+		max_vals.push_back(Max);
+
+		cv::Mat image_disp;
+		cv::Mat B;
+		normalize(image, image_disp, 0, 255, CV_MINMAX);
+		image_disp.convertTo(B, CV_8U);
+
+		imwrite(outdir + "//Amplitude_" + std::to_string(d) + ".png", B);
+
+		image.release();
+		delete[] data;
+	}
+
+	name = outdir + "//Amplitude_MinMax.csv";
+	std::ofstream ofs2(name.c_str(), std::ofstream::out);
+	for (int i = 0; i < min_vals.size(); i++)
+	{
+		ofs2 << min_vals[i] << " , " << max_vals[i] << std::endl;
+
+	}
+	ofs2.close();
+
+	if (usePhase){
+		sock->setOutputMode(1);
+	}
+
+	min_vals.clear();
+	max_vals.clear();
+	for (int d = start; d <= stop; d += step_width){
+		std::cerr << "Load Intensity " << d << std::endl;
+		float* data = new float[width * height];
+		sock->receiveImageData(d, data);
+
+		name = outdir + "//Intensity" + std::to_string(d) + ".ext";
+		FILE* file = fopen(name.c_str(), "wb");
+		fwrite(data, sizeof(float), width * height, file);
+		fclose(file);
+
+		cv::Mat image(cv::Size(width, height), CV_32FC1, data);
+
+		double Min, Max;
+		cv::minMaxLoc(image, &Min, &Max);
+		min_vals.push_back(Min);
+		max_vals.push_back(Max);
+
+		cv::Mat image_disp;
+		cv::Mat B;
+		normalize(image, image_disp, 0, 255, CV_MINMAX);
+		image_disp.convertTo(B, CV_8U);
+
+		imwrite(outdir + "//Intensity" + std::to_string(d) + ".png", B);
+
+		image.release();
+		delete[] data;
+	}
+
+	name = outdir + "//Intensity_MinMax.csv";
+	std::ofstream ofs3(name.c_str(), std::ofstream::out);
+	for (int i = 0; i < min_vals.size(); i++)
+	{
+		ofs3 << min_vals[i] << " , " << max_vals[i] << std::endl;
+
+	}
+	ofs3.close();
 }
 
 void loadImages(std::vector<cv::Mat> &phase_images,
@@ -98,30 +242,24 @@ void loadImages(std::vector<cv::Mat> &phase_images,
 			if (!skip_load && online)
 			{
 				sock->receiveImageData(d, data);
-
-				if (doWriteImages){
-					std::string name = datafolder + "//Phase_" + std::to_string(d) + ".ext";
-					FILE* file = fopen(name.c_str(), "wb");
-					fwrite(data, sizeof(float), width * height, file);
-					fclose(file);
-				}
 			}
 			else
 			{
-				//std::string name = datafolder + "//Phase_" + std::to_string(d) + ".ext";
-				std::string name = "data//EN_581_cast_7__15-Jun-2016_01-07-21-715//Phase_" + std::to_string(d) + ".ext";
+				std::string name = datafolder + "//" + filename + "//Phase_" + std::to_string(d) + ".ext";
+				//std::string name = "data//EN_581_cast_7__15-Jun-2016_01-07-21-715//Phase_" + std::to_string(d) + ".ext";
 				FILE* file = fopen(name.c_str(), "rb");
 				fread(data, sizeof(float), width * height, file);
 				fclose(file);
 			}
 
 			cv::Mat image(cv::Size(width, height), CV_32FC1, data);
+			//image = abs(image);
 
 			double Min, Max;
 			cv::minMaxLoc(image, &Min, &Max);
 			minAll = (minAll > Min) ? Min : minAll;
 			maxAll = (maxAll < Max) ? Max : maxAll;
-
+			std::cerr << Min << std::endl;
 			//remove borders:
 			int size = 100;
 			if (d < 3000){
@@ -131,7 +269,6 @@ void loadImages(std::vector<cv::Mat> &phase_images,
 			{
 				size = 150;
 			}
-
 
 			float val = (!usePhase) ? Max : Min;
 
@@ -378,6 +515,8 @@ void saveROI(std::string outdir, std::vector<cv::Rect> bounds, std::vector<int> 
 		}
 
 		cv::Mat image(cv::Size(width, height), CV_32FC1, data);
+		//if (mode == 2) image = abs(image);
+
 		cv::Rect bound_cont = bounds[c];
 		bound_cont.x = bound_cont.x - 20;
 		bound_cont.y = bound_cont.y - 20;
@@ -511,14 +650,130 @@ bool mergebounds(std::vector<cv::Rect> &bounds, std::vector<int> &depths_contour
 	return merged;
 }
 
+void test()
+{
+	float* data = new float[width  * height];
+	std::string name = "data_out//EN_581_cast_7__15-Jun-2016_01-30-41-283.bmp//maximum.ext";
+	FILE* file = fopen(name.c_str(), "rb");
+	fread(data, sizeof(float), width * height, file);
+	fclose(file);
+	cv::Mat maximum(cv::Size(width, height), CV_32FC1, data);
+
+	cv::Mat maximum_norm;
+	normalize(maximum, maximum_norm, 0.0, 1.0, CV_MINMAX);
+	cv::Mat maximum_norm_scaled;
+	cv::resize(maximum_norm, maximum_norm_scaled, cv::Size(), 0.5, 0.5, INTER_LANCZOS4);
+
+
+	cv::Mat maximum_fg;
+	cv::Mat maximum_pfg;
+	cv::Mat maximum_pbg;
+
+	float mean = cv::mean(maximum_norm(cv::Rect(100, 100, 1848, 1848)))[0];
+	std::cerr << mean << std::endl;
+	threshold(maximum_norm_scaled, maximum_fg, mean*1.7, 1., CV_THRESH_BINARY & CV_THRESH_OTSU);
+	threshold(maximum_norm_scaled, maximum_pfg, mean*1.5, 1., CV_THRESH_BINARY & CV_THRESH_OTSU);
+	threshold(maximum_norm_scaled, maximum_pbg, mean*1.3, 1., CV_THRESH_BINARY & CV_THRESH_OTSU);
+
+	
+
+	namedWindow("Maximum", WINDOW_NORMAL);
+	if (show)
+	{
+		cv::Mat image_disp;
+		cv::Mat B;
+		normalize(maximum_fg, image_disp, 0, 255, CV_MINMAX);
+		image_disp.convertTo(B, CV_8U);
+		imshow("Maximum", B);
+		cv::waitKey(0);
+
+		normalize(maximum_pfg, image_disp, 0, 255, CV_MINMAX);
+		image_disp.convertTo(B, CV_8U);
+		imshow("Maximum", B);
+		cv::waitKey(0);
+
+		normalize(maximum_pbg, image_disp, 0, 255, CV_MINMAX);
+		image_disp.convertTo(B, CV_8U);
+		imshow("Maximum", B);
+		cv::waitKey(0);
+	}
+
+	cv::Mat mask(maximum_norm_scaled.size(), CV_8UC1, cv::Scalar(GC_BGD));
+	cv::Mat tmp;
+
+	maximum_pbg.convertTo(tmp, CV_8UC1);
+	mask.setTo(GC_PR_BGD, tmp);
+
+	maximum_pfg.convertTo(tmp, CV_8UC1);
+	mask.setTo(GC_PR_FGD, tmp);
+
+	maximum_fg.convertTo(tmp, CV_8UC1);
+	mask.setTo(GC_FGD, tmp);
+
+	if (show)
+	{
+		imshow("Maximum", mask*50);
+		cv::waitKey(1);
+	}
+
+	cv::Mat bw;
+	maximum_norm.convertTo(bw, CV_8U, 255.0);
+	cv::Mat bw_scaled;
+	cv::resize(bw, bw_scaled, cv::Size(), .5, 0.5, INTER_LANCZOS4);
+
+	cv::Mat src;
+	cvtColor(bw_scaled, src, CV_GRAY2RGB);
+
+	cv::Mat bgdModel;
+	cv::Mat fgdModel;
+
+	cv::Mat result_a;
+	cv::Mat result_b;
+	cv::Mat result;
+
+	grabCut(src, mask, cv::Rect(0, 0, width, height), bgdModel, fgdModel, 1, GC_INIT_WITH_MASK);
+	if (show)
+	{
+		imshow("Maximum", mask *50);
+		cv::waitKey(1);
+	}
+	int count = 0;
+	while (1)
+	{
+		std::cerr << "iter " << count++ << std::endl;
+		grabCut(src, mask, cv::Rect(0, 0, width, height), bgdModel, fgdModel, 1, GC_EVAL);
+		if (show)
+		{
+			// Get the pixels marked as background
+			cv::compare(mask, cv::GC_FGD, result_a, cv::CMP_EQ);
+			// Get the pixels marked as likely background
+			cv::compare(mask, cv::GC_PR_FGD, result_b, cv::CMP_EQ);
+			// Final results
+			result = result_a + result_b;
+
+			imshow("Maximum", result * 50);
+			cv::waitKey(1);
+		}
+	}
+
+	maximum.release();
+	delete[] data;
+}
+
 int main(int argc, char** argv)
 {
-
+	
 	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
 	if (argc > 1)
 	{
 		filename = std::string(argv[1]);
+	}
+
+	if (doWriteImages)
+	{
+		writeImages(min_depth, max_depth, step_size);
+		return 1;
 	}
 
 	std::string outdir = outputfolder + "//" + filename;
@@ -565,15 +820,15 @@ int main(int argc, char** argv)
 	////////Find Maximas
 	cv::Mat image_maximum = findMaximas(phase_images, depths, min_depth, max_depth, step_size, image_maximumDepth);
 	{
-		std::string name = outdir + "//maximum.ext";
-		FILE* file = fopen(name.c_str(), "wb");
-		fwrite(image_maximum.data, sizeof(float), width * height, file);
-		fclose(file);
+		//std::string name = outdir + "//maximum.ext";
+		//FILE* file = fopen(name.c_str(), "wb");
+		//fwrite(image_maximum.data, sizeof(float), width * height, file);
+		//fclose(file);
 
-		name = outdir + "//maximumDepth.ext";
-		file = fopen(name.c_str(), "wb");
-		fwrite(image_maximumDepth.data, sizeof(float), width * height, file);
-		fclose(file);
+		//name = outdir + "//maximumDepth.ext";
+		//file = fopen(name.c_str(), "wb");
+		//fwrite(image_maximumDepth.data, sizeof(float), width * height, file);
+		//fclose(file);
 	}
 	if (show)
 	{
