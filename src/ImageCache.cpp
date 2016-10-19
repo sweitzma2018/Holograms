@@ -39,6 +39,7 @@ cv::Mat* ImageCache::getPhaseImage(int depth)
 		m_mode.push_back(2);
 		m_depths.push_back(depth);
 		idx = m_images.size() - 1;
+		removeBorders(&(m_images[idx]), depth);
 	}
 	
 	return &(m_images[idx]);
@@ -46,7 +47,7 @@ cv::Mat* ImageCache::getPhaseImage(int depth)
 
 cv::Mat* ImageCache::getIntensityImage(int depth)
 {
-	int idx = findInCache(2, depth);
+	int idx = findInCache(0, depth);
 	if (idx < 0)
 	{
 		if (m_images.size() == m_maxImages) removeOldestImage();
@@ -60,6 +61,7 @@ cv::Mat* ImageCache::getIntensityImage(int depth)
 		m_mode.push_back(0);
 		m_depths.push_back(depth);
 		idx = m_images.size() - 1;
+		removeBorders(&(m_images[idx]), depth);
 	}
 
 	return &(m_images[idx]);
@@ -67,7 +69,7 @@ cv::Mat* ImageCache::getIntensityImage(int depth)
 
 cv::Mat* ImageCache::getAmplitudeImage(int depth)
 {
-	int idx = findInCache(2, depth);
+	int idx = findInCache(1, depth);
 	if (idx < 0)
 	{
 		if (m_images.size() == m_maxImages) removeOldestImage();
@@ -81,6 +83,7 @@ cv::Mat* ImageCache::getAmplitudeImage(int depth)
 		m_mode.push_back(1);
 		m_depths.push_back(depth);
 		idx = m_images.size() - 1;
+		removeBorders(&(m_images[idx]), depth);
 	}
 
 	return &(m_images[idx]);
@@ -105,4 +108,26 @@ void ImageCache::removeOldestImage()
 	m_images_data.erase(m_images_data.begin());
 	m_depths.erase(m_depths.begin());
 	m_mode.erase(m_mode.begin());
+}
+
+void ImageCache::removeBorders(cv::Mat* image, int depth)
+{
+	int size = 100;
+	if (depth < 3000){
+		size = 300;
+	}
+	else if (depth < 7000)
+	{
+		size = 150;
+	}
+	
+	float val = 0;
+	
+	if (size > 0)
+	{		
+		(*image)(cv::Rect(0, 0, size, image->rows)) = val;
+		(*image)(cv::Rect(0, 0, image->cols, size)) = val;
+		(*image)(cv::Rect(image->cols - size, 0, size, image->rows)) = val;
+		(*image)(cv::Rect(0, image->rows - size, image->cols, size)) = val;
+	}
 }
